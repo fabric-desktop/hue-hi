@@ -1,0 +1,41 @@
+.hue-hi-cta {
+	margin-bottom: 0.6rem;
+	border-radius: 0.50rem;
+	border: 1px solid rgba(100, 100, 80, 0.1);
+	padding: 2rem 1rem;
+	color: rgba(100, 100, 100, 0.8);
+	text-shadow: 0.0625rem 0.0625rem rgba(255, 255, 255, 1);
+}
+
+#HomeLightControl {
+	margin-bottom: 0.6rem;
+	border-radius: 0.50rem;
+	border: 0.0625rem solid rgba(100, 100, 80, 0.1);
+	padding: 0.1rem;
+	padding-top: 0.5rem;
+	background: linear-gradient(to bottom, rgba(0, 0, 100, 0.1), rgba(0, 0, 0, 0));
+	transition:
+		border-color 0.25s ease-out
+		, background 0.25s ease-out
+	;
+	padding-left: 0.6rem;
+	padding-right: 0.6rem;
+}
+#HomeLightControl.is-on {
+	border: 0.0625rem solid rgba(0, 0, 100, 0.3);
+	background: linear-gradient(to bottom, rgba(255, 255,  24, 0.1), rgba(0, 0, 0, 0));
+}
+#HomeLightControl .top-bits {
+	margin: 0;
+}
+#HomeLightControl .-name {
+	margin-right: 0.6rem;
+}
+#HomeLightControl .-icon {
+	/* Works around a weird offset... */
+	transform: translateX(-0.0625rem);
+	margin-right: 0.6rem;
+	min-width: 0;
+	min-height: 0;
+	-gtk-icon-size: 2.2rem;
+}
