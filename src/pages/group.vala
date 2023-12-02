@@ -59,7 +59,7 @@ namespace Fabric.Applications.HueHi.Pages {
 
 		public Group(Models.Group group) {
 			this.group = group;
-			header.label = "Group “%s”".printf(group.name);
+			add_header("Group “%s”".printf(group.name));
 
 			toggle = new Gtk.Switch();
 			toggle.vexpand = false;

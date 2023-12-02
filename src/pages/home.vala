@@ -156,7 +156,7 @@ namespace Fabric.Applications.HueHi.Pages {
 		}
 
 		construct {
-			header.label = "Home";
+			add_header("Home");
 
 			// TODO: have the "empty CTA" widget share duty of handling a loading state...
 
