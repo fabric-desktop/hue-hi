@@ -12,7 +12,8 @@ dependencies = [
   dependency('glib-2.0'),
   dependency('json-glib-1.0'),
   dependency('gtk4'),
-  dependency('fabric-ui', fallback:['fabric-ui', 'fabric-ui_dep']),
+  dependency('gee-0.8', version: '>=0.18'),
+  dependency('fabric-ui', fallback:['fabric-ui', 'fabric_ui_dep']),
 ]
 
 # Add data for use at runtime

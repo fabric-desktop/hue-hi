@@ -25,6 +25,7 @@ stdenv.mkDerivation {
     glib
     gtk4
     json-glib
+    libgee
     fabric-ui
   ];
 
