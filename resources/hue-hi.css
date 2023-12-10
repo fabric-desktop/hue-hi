@@ -39,3 +39,9 @@
 	min-height: 0;
 	-gtk-icon-size: 2.2rem;
 }
+.fabric-maybe-empty-box.-is-loading {
+	opacity: 0.5;
+}
+.fabric-maybe-empty-box spinner {
+	padding: 0.6rem;
+}
