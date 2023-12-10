@@ -34,11 +34,13 @@ namespace Fabric.Applications.HueHi.Models {
 		}
 
 		protected static Future<Json.Node> hueadm_json(string command) {
-			return hueadm(command).map<Json.Node>((result) => {
-				Json.Parser parser = new Json.Parser();
-				parser.load_from_data(result);
-				return parser.get_root();
-			});
+			return hueadm(command)
+				.map<Json.Node>((result) => {
+					Json.Parser parser = new Json.Parser();
+					parser.load_from_data(result);
+					return parser.get_root();
+				})
+			;
 		}
 	}
 
@@ -72,6 +74,9 @@ namespace Fabric.Applications.HueHi.Models {
 		public bool is_on { get; protected set; }
 		public int brightness { get; protected set; }
 
+		protected uint brightness_debounce_handle = 0;
+		protected int desired_brightness = 0;
+
 		private ArrayList<Scene> _scenes = new ArrayList<Scene>();
 		public Gee.List<Scene> scenes {
 			get {
@@ -86,7 +91,7 @@ namespace Fabric.Applications.HueHi.Models {
 						.split("\n")
 					;
 					foreach (unowned string id in ids) {
-						_scenes.add(new Scene.from_id(id));
+						_scenes.add(Scene.get_from_id(id).value);
 					}
 				}
 
@@ -95,17 +100,9 @@ namespace Fabric.Applications.HueHi.Models {
 		}
 
 		public static Future<ArrayList<Group>> from_query(string type) {
-			var promise = new Promise<ArrayList<Group>>();
-
-			new Thread<void*>("_group", () => {
-				var result = hueadm_json("groups --json");
-				result.wait();
-
-				if (result.exception != null) {
-					promise.set_exception(result.exception);
-				}
-				else {
-					Json.Object data = result.value.get_object();
+			return hueadm_json("groups --json")
+				.map<ArrayList<Group>>((result) => {
+					Json.Object data = result.get_object();
 
 					ArrayList<Group> ret = new ArrayList<Group>();
 					data.foreach_member((_, id, node) => {
@@ -115,13 +112,9 @@ namespace Fabric.Applications.HueHi.Models {
 						}
 					});
 
-					promise.set_value(ret);
-				}
-
-				return null;
-			});
-
-			return promise.future;
+					return ret;
+				})
+			;
 		}
 
 		protected Group() {}
@@ -132,27 +125,53 @@ namespace Fabric.Applications.HueHi.Models {
 		}
 
 		protected void _update_fields(Json.Object obj) {
-			name = obj.get_string_member("name");
-			group_type = obj.get_string_member("type");
-			group_class = obj.get_string_member("class");
+			lock (name) {
+				name = obj.get_string_member("name");
+			}
+			lock (group_type) {
+				group_type = obj.get_string_member("type");
+			}
+			lock (group_class) {
+				group_class = obj.get_string_member("class");
+			}
 			var action = obj.get_object_member("action");
-			is_on = action.get_boolean_member("on");
-			brightness = (int)action.get_int_member("bri");
+			lock (is_on) {
+				is_on = action.get_boolean_member("on");
+			}
+			lock (brightness) {
+				brightness = (int)action.get_int_member("bri");
+			}
 		}
 
 		public void refresh() {
-			Json.Object data = hueadm_json("group --json %s".printf(Shell.quote(this.id))).value.get_object();
-			_update_fields(data);
+			new Thread<void*>("_group", () => {
+				Json.Object data = hueadm_json("group --json %s".printf(Shell.quote(this.id))).value.get_object();
+				_update_fields(data);
+
+				return null;
+			});
 		}
 
 		public void set_on(bool value) {
-			hueadm("group %s %s".printf(Shell.quote(id), value ? "on" : "off"));
-			refresh();
+			new Thread<void*>("_group", () => {
+				hueadm("group %s %s".printf(Shell.quote(id), value ? "on" : "off")).wait();
+				refresh();
+				return null;
+			});
 		}
 		public void set_brightness_value(int value) {
-			// TODO: add debouncing here, as many model users (e.g. scales) will cause many updates.
-			hueadm("group %s =%d".printf(Shell.quote(id), value));
-			refresh();
+			desired_brightness = value;
+			if (brightness_debounce_handle != 0) {
+				Source.remove(brightness_debounce_handle);
+			}
+			brightness_debounce_handle = Timeout.add_once(250, () => {
+				brightness_debounce_handle = 0;
+				new Thread<void*>("_group", () => {
+					hueadm("group %s =%d".printf(Shell.quote(id), desired_brightness)).wait();
+					refresh();
+					return null;
+				});
+			});
 		}
 	}
 
@@ -213,23 +232,34 @@ namespace Fabric.Applications.HueHi.Models {
 		protected Scene() {}
 
 		protected void _update_fields(Json.Object obj) {
-			name = obj.get_string_member("name");
-			scene_type = obj.get_string_member("type");
-			group_id = obj.get_string_member("group");
+			lock (name) {
+				name = obj.get_string_member("name");
+			}
+			lock (scene_type) {
+				scene_type = obj.get_string_member("type");
+			}
+			lock (group_id) {
+				group_id = obj.get_string_member("group");
+			}
 		}
 
 		protected Scene.from_object(string id, Json.Object obj) {
 			this.id = id;
 			_update_fields(obj);
 		}
-		public Scene.from_id(string id) {
-			this.id = id;
-			this.refresh();
+		public static Future<Scene> get_from_id(string id) {
+			return hueadm_json("scene --json %s".printf(Shell.quote(id)))
+				.map<Scene>((result) => {
+					return new Scene.from_object(id, result.get_object());
+				})
+			;
 		}
+
 		public void refresh() {
 			Json.Object data = hueadm_json("scene --json %s".printf(Shell.quote(this.id))).value.get_object();
 			_update_fields(data);
 		}
+
 		public void activate() {
 			if (scene_type == "GroupScene") {
 				hueadm("group %s scene=%s".printf(Shell.quote(group_id), Shell.quote(id)));
@@ -237,7 +267,6 @@ namespace Fabric.Applications.HueHi.Models {
 			else {
 				error("Scene type “%s” is not handled yet...", scene_type);
 			}
-
 		}
 	}
 }
