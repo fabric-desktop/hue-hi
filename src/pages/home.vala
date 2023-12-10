@@ -141,7 +141,7 @@ namespace Fabric.Applications.HueHi.Pages {
 	class Home : Fabric.UI.ScrollingPage {
 		private Fabric.UI.MaybeEmptyBox rooms_container;
 		private Fabric.UI.MaybeEmptyBox zones_container;
-		private List<Models.Group> groups;
+		private Gee.List<Models.Group> groups;
 		private bool first_mapped = true;
 
 		private Home() {}
@@ -158,6 +158,8 @@ namespace Fabric.Applications.HueHi.Pages {
 		construct {
 			add_header("Home");
 
+			groups = new Gee.ArrayList<Models.Group>();
+
 			// TODO: have the "empty CTA" widget share duty of handling a loading state...
 
 			append(Fabric.UI.Helpers.make_subheading("Rooms"));
@@ -165,25 +167,39 @@ namespace Fabric.Applications.HueHi.Pages {
 			rooms_container.empty_widget = new HomeLightCta(HomeLightCta.ROOM);
 			append(rooms_container);
 
-			var rooms = Models.Group.from_query("Room");
-			foreach(Models.Group room in rooms) {
-				rooms_container.append(new HomeLightControl(room));
-				groups.append(room);
-			}
-
 			append(Fabric.UI.Helpers.make_subheading("Zones"));
 			zones_container = new Fabric.UI.MaybeEmptyBox();
 			zones_container.empty_widget = new HomeLightCta(HomeLightCta.ZONE);
 			append(zones_container);
 
-			var zones = Models.Group.from_query("Zone");
-			foreach(Models.Group zone in zones) {
-				zones_container.append(new HomeLightControl(zone));
-				groups.append(zone);
-			}
+			fetch_data();
 
 			map.connect(() => {
 				refresh();
+			});
+		}
+
+		public void fetch_data() {
+			new Thread<void*>("_rooms", () => {
+				rooms_container.loading = true;
+				var rooms = Models.Group.from_query("Room").value;
+				foreach(Models.Group room in rooms) {
+					rooms_container.append(new HomeLightControl(room));
+					groups.add(room);
+				}
+				rooms_container.loading = false;
+				return null;
+			});
+			new Thread<void*>("_zones", () => {
+				zones_container.loading = true;
+				var zones = Models.Group.from_query("Zone").value;
+				foreach(Models.Group zone in zones) {
+					zones_container.append(new HomeLightControl(zone));
+					groups.add(zone);
+				}
+				zones_container.loading = false;
+				refresh();
+				return null;
 			});
 		}
 

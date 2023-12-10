@@ -75,13 +75,19 @@ namespace Fabric.Applications.HueHi.Pages {
 
 			append(Fabric.UI.Helpers.make_subheading("Scenes"));
 			scenes_container = new Fabric.UI.MaybeEmptyBox();
+			scenes_container.loading = true;
 			scenes_container.children_per_line = 4;
 			scenes_container.empty_widget = new GroupPageCta(GroupPageCta.SCENE);
 			append(scenes_container);
 
-			foreach(Models.Scene scene in group.scenes) {
-				scenes_container.append(new SceneControl(scene));
-			}
+			new Thread<void*>("_scenes", () => {
+				foreach(var scene in group.scenes) {
+					scenes_container.append(new SceneControl(scene));
+				}
+
+				scenes_container.loading = false;
+				return null;
+			});
 
 			// TODO light controls
 			/*
