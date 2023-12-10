@@ -1,35 +1,44 @@
+using Gee;
+
 namespace Fabric.Applications.HueHi.Models {
 	const string HUEADM = "hueadm";
 
 	class HueAdmModel : Object {
 		protected HueAdmModel() { }
 
-		protected static string hueadm(string command) {
-			string stdout = "";
-			string stderr = "";
-			int status = 0;
+		protected static Future<string> hueadm(string command) {
+			var promise = new Promise<string>();
 
-			var shell = "%s %s".printf(HUEADM, command);
-			debug(" $ %s".printf(shell));
+			new Thread<void*>("_hueadm", () => {
+				string stdout = "";
+				string stderr = "";
+				int status = 0;
 
-			// TODO handle non-zero status
-			Process.spawn_command_line_sync(
-				shell,
-				out stdout,
-				out stderr,
-				out status
-			);
+				var shell = "%s %s".printf(HUEADM, command);
+				debug(" $ %s".printf(shell));
 
-			return stdout;
+				// TODO handle non-zero status
+				Process.spawn_command_line_sync(
+					shell,
+					out stdout,
+					out stderr,
+					out status
+				);
+
+				promise.set_value(stdout);
+
+				return null;
+			});
+
+			return promise.future;
 		}
 
-		protected static Json.Node hueadm_json(string command) {
-			var stdout = hueadm(command);
-
-			Json.Parser parser = new Json.Parser();
-			parser.load_from_data(stdout);
-
-			return parser.get_root();
+		protected static Future<Json.Node> hueadm_json(string command) {
+			return hueadm(command).map<Json.Node>((result) => {
+				Json.Parser parser = new Json.Parser();
+				parser.load_from_data(result);
+				return parser.get_root();
+			});
 		}
 	}
 
@@ -63,20 +72,21 @@ namespace Fabric.Applications.HueHi.Models {
 		public bool is_on { get; protected set; }
 		public int brightness { get; protected set; }
 
-		private List<Scene> _scenes = new List<Scene>();
-		public List<Scene> scenes {
+		private ArrayList<Scene> _scenes = new ArrayList<Scene>();
+		public Gee.List<Scene> scenes {
 			get {
 				// Currently the lifecycle of the app is limited, so it's *okay* to not
 				// refresh the scenes all the time.
 				// Anyway they don't *change* other than being edited (renamed, lights changed)...
 				// they are stateless in fleeting state (in-use or not)...
-				if (_scenes.length() == 0) {
+				if (_scenes.size == 0) {
 					var ids = hueadm("scenes group=%s -H -oid".printf(Shell.quote(this.id)))
+						.value
 						.strip()
 						.split("\n")
 					;
 					foreach (unowned string id in ids) {
-						_scenes.append(new Scene.from_id(id));
+						_scenes.add(new Scene.from_id(id));
 					}
 				}
 
@@ -84,17 +94,34 @@ namespace Fabric.Applications.HueHi.Models {
 			}
 		}
 
-		public static List<Group> from_query(string type) {
-			List<Group> ret = new List<Group>();
-			Json.Object data = hueadm_json("groups --json").get_object();
-			data.foreach_member((_, id, node) => {
-				if (type == "" || type == node.get_object().get_string_member("type")) {
-					var group = new Group.from_object(id, node.get_object());
-					ret.append(group);
+		public static Future<ArrayList<Group>> from_query(string type) {
+			var promise = new Promise<ArrayList<Group>>();
+
+			new Thread<void*>("_group", () => {
+				var result = hueadm_json("groups --json");
+				result.wait();
+
+				if (result.exception != null) {
+					promise.set_exception(result.exception);
 				}
+				else {
+					Json.Object data = result.value.get_object();
+
+					ArrayList<Group> ret = new ArrayList<Group>();
+					data.foreach_member((_, id, node) => {
+						if (type == "" || type == node.get_object().get_string_member("type")) {
+							var group = new Group.from_object(id, node.get_object());
+							ret.add(group);
+						}
+					});
+
+					promise.set_value(ret);
+				}
+
+				return null;
 			});
 
-			return (owned)ret;
+			return promise.future;
 		}
 
 		protected Group() {}
@@ -114,7 +141,7 @@ namespace Fabric.Applications.HueHi.Models {
 		}
 
 		public void refresh() {
-			Json.Object data = hueadm_json("group --json %s".printf(Shell.quote(this.id))).get_object();
+			Json.Object data = hueadm_json("group --json %s".printf(Shell.quote(this.id))).value.get_object();
 			_update_fields(data);
 		}
 
@@ -200,7 +227,7 @@ namespace Fabric.Applications.HueHi.Models {
 			this.refresh();
 		}
 		public void refresh() {
-			Json.Object data = hueadm_json("scene --json %s".printf(Shell.quote(this.id))).get_object();
+			Json.Object data = hueadm_json("scene --json %s".printf(Shell.quote(this.id))).value.get_object();
 			_update_fields(data);
 		}
 		public void activate() {
